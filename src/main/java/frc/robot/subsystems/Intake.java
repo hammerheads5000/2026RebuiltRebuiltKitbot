@@ -16,23 +16,29 @@ import edu.wpi.first.wpilibj2.command.SubsystemBase;
 
 public class Intake extends SubsystemBase {
   VoltageOut voltageRequest = new VoltageOut(0);
-  TalonSRX deciderFuelMotor = new TalonSRX(1);
+  TalonSRX bottomMotor = new TalonSRX(1);
+  TalonSRX topMotor = new TalonSRX(2);
   DoubleEntry speedEntry = NetworkTableInstance.getDefault().getDoubleTopic("name").getEntry(0);
 
-  /** Creates a new Intake/FuelMechanism. */
+  /** Creates a new FuelMechanism. */
   public Intake() {
-    deciderFuelMotor.setInverted(false);
-    deciderFuelMotor.setNeutralMode(NeutralMode.Brake);
-    deciderFuelMotor.configSupplyCurrentLimit(new SupplyCurrentLimitConfiguration(true, 40, 40, 0.5));
+    bottomMotor.setInverted(false);
+    topMotor.setInverted(false);
+    bottomMotor.setNeutralMode(NeutralMode.Brake);
+    topMotor.setNeutralMode(NeutralMode.Brake);
+    bottomMotor.configSupplyCurrentLimit(new SupplyCurrentLimitConfiguration(true, 40, 40, 0.5));
+    topMotor.configSupplyCurrentLimit(new SupplyCurrentLimitConfiguration(true, 40, 40, 0.5));
     speedEntry.set(0);
 }
 
-  public void setSpeeds(AngularVelocity setpoint, double rightSpeed) {
-        deciderFuelMotor.set(com.ctre.phoenix.motorcontrol.ControlMode.PercentOutput, rightSpeed);
+  public void setSpeeds(AngularVelocity setpoint, double speed) {
+        bottomMotor.set(com.ctre.phoenix.motorcontrol.ControlMode.PercentOutput, speed);
+        topMotor.set(com.ctre.phoenix.motorcontrol.ControlMode.PercentOutput, speed);
     }
 
   public void stop() {
-        deciderFuelMotor.neutralOutput();
+        bottomMotor.neutralOutput();
+        topMotor.neutralOutput();
     } 
 
   public Command intakeCommand(AngularVelocity speed) {
