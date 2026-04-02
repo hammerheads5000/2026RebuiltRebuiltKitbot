@@ -28,7 +28,7 @@ public class RobotContainer {
 
     /* Setting up bindings for necessary control of the swerve drive platform */
     private final SwerveRequest.FieldCentric drive = new SwerveRequest.FieldCentric()
-            .withDeadband(MaxSpeed * 0.1).withRotationalDeadband(MaxAngularRate * 0.1) // Add a 10% deadband
+            .withDeadband(MaxSpeed * 0.15).withRotationalDeadband(MaxAngularRate * 0.15) // Increased to 15% to stop stick drift
             .withDriveRequestType(DriveRequestType.OpenLoopVoltage); // Use open-loop control for drive motors
     private final SwerveRequest.SwerveDriveBrake brake = new SwerveRequest.SwerveDriveBrake();
     private final SwerveRequest.PointWheelsAt point = new SwerveRequest.PointWheelsAt();
@@ -75,6 +75,9 @@ public class RobotContainer {
         rightJoystick.button(3).whileTrue(drivetrain.applyRequest(() ->
             point.withModuleDirection(new Rotation2d(-leftJoystick.getY(), -leftJoystick.getX()))
         ));
+
+        // Zero out the wheels / gyro heading on Right Joystick button 4
+        rightJoystick.button(4).onTrue(drivetrain.runOnce(drivetrain::seedFieldCentric));
 
         // Run SysId routines when holding back/start and X/Y.
         // Note that each routine should be run exactly once in a single log.
