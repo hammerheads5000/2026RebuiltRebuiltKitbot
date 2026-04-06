@@ -38,7 +38,7 @@ public class Shooter extends SubsystemBase {
     shooterMotor.getConfigurator().apply(outputConfigs);
     
     // calculate doesnt save state remove if just testing
-    feedforward.calculate(10, 20); 
+    feedforward.calculateWithVelocities(10, 20); 
   }
 
     // no rightspeed needed without the srx

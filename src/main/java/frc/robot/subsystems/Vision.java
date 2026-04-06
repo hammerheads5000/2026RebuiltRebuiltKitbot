@@ -37,6 +37,7 @@ package frc.robot.subsystems;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.function.Consumer;
+import java.util.Optional;
 
 import org.opencv.calib3d.Calib3d;
 import org.opencv.core.Core;
@@ -71,10 +72,11 @@ import edu.wpi.first.math.util.Units;
 import edu.wpi.first.networktables.IntegerArrayPublisher;
 import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableInstance;
+import edu.wpi.first.networktables.DoubleArrayPublisher;
 import edu.wpi.first.wpilibj.Filesystem;
-import edu.wpi.first.wpilibj.TimedRobot;
+import edu.wpi.first.wpilibj2.command.SubsystemBase;
 
-public class Vision extends TimedRobot {
+public class Vision extends SubsystemBase {
   
   static {
     System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
@@ -90,8 +92,10 @@ public class Vision extends TimedRobot {
   final boolean useLL = false; // do LimeLight processing
   LL ll;
 
-  @Override
-  public void robotInit() {
+  private final CommandSwerveDrivetrain drivetrain;
+
+  public Vision(CommandSwerveDrivetrain drivetrain) {
+    this.drivetrain = drivetrain;
     var visionThread1 = new Thread(this::acquireApriltagThread);
     visionThread1.setDaemon(true);
     visionThread1.start();
@@ -112,18 +116,9 @@ public class Vision extends TimedRobot {
   }
 
 @Override
-  public void robotPeriodic()
+  public void periodic()
   {
       if (useLL) ll.LLacquire();
-  }
-
-  @Override
-  public void teleopPeriodic()
-  // test how much cpu time is left after AprilTag pose process
-  // enable this increases latency from 80ish to 95ish [ms]
-  // and reduces fps from 20ish to 17ish (both have very wide variations)
-  {
-    // for(int i = 1; i < 600_000; i++); // waste some cputime - the edge of 20ms overruns
   }
 
   void acquireApriltagThread() {
@@ -132,10 +127,10 @@ public class Vision extends TimedRobot {
     long frameError = 0;
     
     var detector = new AprilTagDetector();
-    // // look for tag16h5 2023, don't correct any error bits
-    // detector.addFamily("tag16h5", 0); 2023
+    // // look for tag16h5 2026, don't correct any error bits
+    // detector.addFamily("tag16h5", 0); 2026
 
-    // look for tag36h11 2024, correct 0 or 1 error bits on roboRIO v1 or up to 2 on roboRIO v2
+    // look for tag36h11 2026, correct 0 or 1 error bits on roboRIO v1 or up to 2 on roboRIO v2
     // 3 or more corrections are possible on a computer with a lot of memory such as sim mode on a big computer
     detector.addFamily("tag36h11", 1);
     // System.out.println(detector.getQuadThresholdParameters());
@@ -198,9 +193,9 @@ public class Vision extends TimedRobot {
     AprilTagFieldLayout aprilTagFieldLayout;
     try {
       if(CustomTagLayout)
-        aprilTagFieldLayout = new AprilTagFieldLayout(Filesystem.getDeployDirectory() + "/2024-crescendo.json"); // custom file example
+        aprilTagFieldLayout = new AprilTagFieldLayout(Filesystem.getDeployDirectory() + "/2026-field.json"); // custom file example
       else
-        aprilTagFieldLayout = AprilTagFields.k2024Crescendo.loadAprilTagLayoutField();
+        aprilTagFieldLayout = AprilTagFieldLayout.loadFromResource(AprilTagFields.k2025ReefscapeWelded.m_resourceFile);
       } catch (IOException e) {
       e.printStackTrace();
       aprilTagFieldLayout = null;
@@ -271,7 +266,7 @@ public class Vision extends TimedRobot {
       // 0.03872533667096114, -0.2121025605447465, 0.00334472765894009, -0.006080540135581289, 0.4001779842036727
       // );
 ///////////////////////////
-    // double tagSize = 0.1524; // meters of the targeted AprilTag 2023
+    // double tagSize = 0.1524; // meters of the targeted AprilTag 2026
     double tagSize = 0.1651; // meters of the targeted AprilTag
 
     // (https://www.chiefdelphi.com/t/wpilib-apriltagdetector-sample-code/421411/21)
@@ -287,6 +282,7 @@ public class Vision extends TimedRobot {
     // We'll output to NT
     NetworkTable tagsTable = NetworkTableInstance.getDefault().getTable("apriltags");
     IntegerArrayPublisher pubTags = tagsTable.getIntegerArrayTopic("tags").publish();
+    DoubleArrayPublisher pubRobotPose = tagsTable.getDoubleArrayTopic("estimatedRobotPose").publish();
 
     // This cannot be 'true'. The program will never exit if it is. This
     // lets the robot stop this thread when restarting robot code or
@@ -302,9 +298,10 @@ public class Vision extends TimedRobot {
 
       Pose3d tagInFieldFrame; // pose from WPILib resource or custom pose file
 
-      if(aprilTagFieldLayout.getTagPose(detection.getId()).isPresent() && detection.getDecisionMargin() > 50.) // margin < 20 seems bad; margin > 120 are good
+      Optional<Pose3d> tagPose = aprilTagFieldLayout.getTagPose(detection.getId());
+      if(tagPose.isPresent() && detection.getDecisionMargin() > 50.) // margin < 20 seems bad; margin > 120 are good
       {
-        tagInFieldFrame = aprilTagFieldLayout.getTagPose(detection.getId()).get();
+        tagInFieldFrame = tagPose.get();
       }
       else
       {
@@ -498,6 +495,10 @@ public class Vision extends TimedRobot {
       var // robot in field is the composite of 3 pieces
       robotInFieldFrame = ComputerVisionUtil.objectToRobotPose(tagInFieldFrame,  tagInCameraFrame,  cameraInRobotFrame);
 
+      // Add vision measurement to drivetrain
+      double timestamp = acquisitionTime.acquisitionTime / 1.e9;
+      drivetrain.addVisionMeasurement(robotInFieldFrame.toPose2d(), timestamp);
+
       // the above transforms match LimeLight Vision botpose_wpiblue network tables entries
       // as they display in AdvantageScope 3D Field robotInFieldFrame
 
@@ -551,6 +552,12 @@ public class Vision extends TimedRobot {
       tagsTable // display formatted for AdvantageScope Odometry tab
       .getEntry("detectionDecisionMargin_" + detection.getId())
       .setDouble(detection.getDecisionMargin());
+
+      pubRobotPose.set(new double[] {
+        robotInFieldFrame.getX(),
+        robotInFieldFrame.getY(),
+        robotInFieldFrame.getRotation().getZ()
+      });
   
     } // end of all detections
 
@@ -589,6 +596,7 @@ public class Vision extends TimedRobot {
     outputStream.putFrame(mat);
   }
     pubTags.close();
+    pubRobotPose.close();
   }
 
   /**
