@@ -101,11 +101,10 @@ public class RobotContainer {
             drivetrain.runOnce(() -> drivetrain.seedFieldCentric(Rotation2d.kZero)),
             // Then slowly drive forward (away from us) for 5 seconds.
             drivetrain.applyRequest(() ->
-                drive.withVelocityX(0.5)
+                drive.withVelocityX(0.5 * MaxSpeed)
                     .withVelocityY(0)
                     .withRotationalRate(0)
-            )
-            .withTimeout(5.0),
+            ).withTimeout(5.0),
             // Finally idle for the rest of auton
             drivetrain.applyRequest(() -> idle)
         );
